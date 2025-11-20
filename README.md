@@ -68,7 +68,7 @@ This project uses [uv](https://github.com/astral-sh/uv) for dependency managemen
    - `uv run cli.py ollama` - Test Ollama server connectivity
    - `uv run cli.py data` - Test data loading functionality
    - `uv run cli.py graph` - Test graph extraction (requires Ollama)
-   - `uv run cli.py compare` - 🔥 **KEY FEATURE**: Compare LangChain vs BAML performance
+   - `uv run cli.py compare --count 5` - 🔥 **KEY FEATURE**: Compare LangChain vs BAML performance (specify article count)
    - `uv run cli.py all` - Run all tests
    - `uv run cli.py info` - Show project information
 
