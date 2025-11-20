@@ -76,6 +76,11 @@ This project uses [uv](https://github.com/astral-sh/uv) for dependency managemen
 
    **Note:** No need to activate virtual environments - `uv run` handles everything automatically!
 
+   **Prerequisites:**
+   - Ensure Ollama is installed and running: `ollama serve`
+   - Pull the required model: `ollama pull gpt-oss`
+   - Verify connection: `uv run cli.py ollama`
+
 ## Initializing Eval Dataset
 To understand the problem and its solution, we need to have evaluation data on which we can perform several tests to understand how BAML is improving our LangChain knowledge graphs.
 

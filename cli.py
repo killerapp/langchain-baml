@@ -278,31 +278,37 @@ def compare(
     for i, article in enumerate(test_articles):
         console.print(f"  Processing article {i + 1}/{langchain_total}...")
         try:
-            import signal
-            from contextlib import contextmanager
+            # Use threading Timer for more reliable timeout on macOS
+            import threading
+            from queue import Queue
 
-            @contextmanager
-            def timeout_context(seconds):
-                def timeout_handler(signum, frame):
-                    raise TimeoutError(f"Operation timed out after {seconds} seconds")
+            result_queue = Queue()
 
-                signal.signal(signal.SIGALRM, timeout_handler)
-                signal.alarm(seconds)
+            def run_langchain():
                 try:
-                    yield
-                finally:
-                    signal.alarm(0)
+                    doc = Document(page_content=article)
+                    result = langchain_transformer.convert_to_graph_documents([doc])
+                    result_queue.put(("success", result))
+                except Exception as e:
+                    result_queue.put(("error", str(e)))
 
-            with timeout_context(15):  # 15 second timeout per article
-                doc = Document(page_content=article)
-                result = langchain_transformer.convert_to_graph_documents([doc])
-                if result and result[0].nodes:
-                    langchain_success += 1
-                    console.print(f"  ✅ Success")
+            thread = threading.Thread(target=run_langchain)
+            thread.start()
+            thread.join(timeout=15)  # 15 second timeout
+
+            if thread.is_alive():
+                console.print(f"  ⏰ Timed out after 15s")
+            else:
+                status, data = result_queue.get_nowait()
+                if status == "success":
+                    if data and data[0].nodes:
+                        langchain_success += 1
+                        console.print(f"  ✅ Success")
+                    else:
+                        console.print(f"  ❌ No nodes extracted")
                 else:
-                    console.print(f"  ❌ No nodes extracted")
-        except TimeoutError:
-            console.print(f"  ⏰ Timed out after 15s")
+                    console.print(f"  ❌ Failed: {data[:50]}...")
+
         except Exception as e:
             console.print(f"  ❌ Failed: {str(e)[:50]}...")
 
