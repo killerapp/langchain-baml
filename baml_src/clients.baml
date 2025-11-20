@@ -65,10 +65,10 @@ client<llm> Localllm {
 }
 
 client<llm> Ollama {
-  provider "openai-generic"
+  provider ollama
   options {
-    base_url "http://localhost:11434/v1"
-    model gemma2
+    base_url "http://192.168.86.20:11434"
+    model gpt-oss
     temperature 0.001
   }
 }
