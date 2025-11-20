@@ -228,7 +228,9 @@ def graph():
 
 
 @app.command()
-def compare():
+def compare(
+    count: int = typer.Option(2, help="Number of articles to test (default: 2)"),
+):
     """Compare standard LangChain vs BAML graph extraction performance."""
     console.print(
         "[bold green]🔬 Comparing LangChain vs BAML Graph Extraction[/bold green]"
@@ -248,8 +250,8 @@ def compare():
     )
 
     test_articles = [
-        f"{row['title']} {row['text']}"[:500] for i, row in news.head(2).iterrows()
-    ]  # 2 short articles
+        f"{row['title']} {row['text']}"[:500] for i, row in news.head(count).iterrows()
+    ]  # Use specified count of short articles
 
     console.print(f"✅ Loaded {len(test_articles)} test articles (shortened for speed)")
     console.print()
@@ -276,13 +278,31 @@ def compare():
     for i, article in enumerate(test_articles):
         console.print(f"  Processing article {i + 1}/{langchain_total}...")
         try:
-            doc = Document(page_content=article)
-            result = langchain_transformer.convert_to_graph_documents([doc])
-            if result and result[0].nodes:
-                langchain_success += 1
-                console.print(f"  ✅ Success")
-            else:
-                console.print(f"  ❌ No nodes extracted")
+            import signal
+            from contextlib import contextmanager
+
+            @contextmanager
+            def timeout_context(seconds):
+                def timeout_handler(signum, frame):
+                    raise TimeoutError(f"Operation timed out after {seconds} seconds")
+
+                signal.signal(signal.SIGALRM, timeout_handler)
+                signal.alarm(seconds)
+                try:
+                    yield
+                finally:
+                    signal.alarm(0)
+
+            with timeout_context(15):  # 15 second timeout per article
+                doc = Document(page_content=article)
+                result = langchain_transformer.convert_to_graph_documents([doc])
+                if result and result[0].nodes:
+                    langchain_success += 1
+                    console.print(f"  ✅ Success")
+                else:
+                    console.print(f"  ❌ No nodes extracted")
+        except TimeoutError:
+            console.print(f"  ⏰ Timed out after 15s")
         except Exception as e:
             console.print(f"  ❌ Failed: {str(e)[:50]}...")
 
