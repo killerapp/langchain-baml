@@ -60,7 +60,7 @@ This project uses [uv](https://github.com/astral-sh/uv) for dependency managemen
 
 5. Run the interactive testing CLI:
    ```bash
-   graphrag-test
+   python cli.py
    ```
    This launches a beautiful terminal user interface where you can run tests, view results, and monitor the GraphRAG functionality interactively.
 

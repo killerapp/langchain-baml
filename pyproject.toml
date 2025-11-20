@@ -5,8 +5,6 @@ description = "Interactive GraphRAG testing CLI for LangChain BAML"
 readme = "README.md"
 requires-python = ">=3.12"
 
-[project.scripts]
-graphrag-test = "cli:main"
 dependencies = [
     "baml-py>=0.213.0",
     "graphdatascience>=1.17",
