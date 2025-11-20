@@ -6,6 +6,8 @@ Graph RAG Testing CLI - Interactive CLI for testing LangChain BAML GraphRAG func
 import time
 import asyncio
 import os
+import threading
+from queue import Queue
 from typing import Optional
 from pathlib import Path
 
@@ -364,6 +366,9 @@ def compare(
     stream_feedback: bool = typer.Option(
         False, help="Enable streaming feedback with up/down arrows"
     ),
+    timeout: int = typer.Option(
+        30, help="Timeout in seconds for each LLM call (default: 30)"
+    ),
 ):
     """Compare standard LangChain vs BAML graph extraction performance."""
     console.print(
@@ -413,9 +418,6 @@ def compare(
         console.print(f"  Processing article {i + 1}/{langchain_total}...")
         try:
             # Use threading Timer for more reliable timeout on macOS
-            import threading
-            from queue import Queue
-
             result_queue = Queue()
 
             def run_langchain():
@@ -428,10 +430,10 @@ def compare(
 
             thread = threading.Thread(target=run_langchain)
             thread.start()
-            thread.join(timeout=15)  # 15 second timeout
+            thread.join(timeout=timeout)
 
             if thread.is_alive():
-                console.print(f"  ⏰ Timed out after 15s")
+                console.print(f"  ⏰ Timed out after {timeout}s")
             else:
                 status, data = result_queue.get_nowait()
                 if status == "success":
@@ -532,39 +534,67 @@ def compare(
             console.print(f"  Processing article {i + 1}/{baml_total}...")
 
             feedback = None
+            result = None
             try:
-                if stream_feedback:
-                    # Create streaming feedback handler
-                    feedback = StreamingFeedback(console)
-                    feedback.start_streaming()
+                # Use threading for timeout protection on BAML calls too
+                result_queue = Queue()
 
-                    def on_tick_callback(event_type: str, log):
-                        """Callback for streaming feedback."""
-                        if feedback is None:
-                            return
-                        # Determine direction based on event type or log content
-                        if hasattr(log, "role") and log.role == "user":
-                            feedback.update_feedback("up", log)
-                        elif hasattr(log, "role") and log.role in [
-                            "assistant",
-                            "system",
-                        ]:
-                            feedback.update_feedback("down", log)
-                        else:
-                            # Default to alternating pattern for visual feedback
-                            feedback.update_feedback(
-                                "up" if i % 2 == 0 else "down", log
+                def run_baml():
+                    try:
+                        if stream_feedback:
+                            # Create streaming feedback handler
+                            nonlocal feedback
+                            feedback = StreamingFeedback(console)
+                            feedback.start_streaming()
+
+                            def on_tick_callback(event_type: str, log):
+                                """Callback for streaming feedback."""
+                                if feedback is None:
+                                    return
+                                # Determine direction based on event type or log content
+                                if hasattr(log, "role") and log.role == "user":
+                                    feedback.update_feedback("up", log)
+                                elif hasattr(log, "role") and log.role in [
+                                    "assistant",
+                                    "system",
+                                ]:
+                                    feedback.update_feedback("down", log)
+                                else:
+                                    # Default to alternating pattern for visual feedback
+                                    feedback.update_feedback(
+                                        "up" if i % 2 == 0 else "down", log
+                                    )
+
+                            # Use streaming BAML call with on_tick callback
+                            baml_result = client.b.ExtractGraph(
+                                graph=article,
+                                baml_options={"on_tick": on_tick_callback},
                             )
+                            result_queue.put(("success", baml_result))
+                            feedback.finish_streaming(success=True)
+                        else:
+                            # Use regular non-streaming call
+                            baml_result = client.b.ExtractGraph(graph=article)
+                            result_queue.put(("success", baml_result))
+                    except Exception as e:
+                        result_queue.put(("error", str(e)))
+                        if feedback:
+                            feedback.finish_streaming(success=False)
 
-                    # Use streaming BAML call with on_tick callback
-                    result = client.b.ExtractGraph(
-                        graph=article, baml_options={"on_tick": on_tick_callback}
-                    )
+                thread = threading.Thread(target=run_baml)
+                thread.start()
+                thread.join(timeout=timeout)
 
-                    feedback.finish_streaming(success=True)
+                if thread.is_alive():
+                    console.print(f"  ⏰ Timed out after {timeout}s")
+                    if feedback:
+                        feedback.finish_streaming(success=False)
                 else:
-                    # Use regular non-streaming call
-                    result = client.b.ExtractGraph(graph=article)
+                    status, data = result_queue.get_nowait()
+                    if status == "success":
+                        result = data
+                    else:
+                        console.print(f"  ❌ Failed: {data[:50]}...")
 
                 if result and hasattr(result, "nodes") and result.nodes:
                     baml_success += 1
