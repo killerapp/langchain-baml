@@ -60,16 +60,18 @@ This project uses [uv](https://github.com/astral-sh/uv) for dependency managemen
 
 5. Run the interactive testing CLI:
    ```bash
-   python cli.py --help
+   uv run cli.py --help
    ```
    This shows available commands for testing GraphRAG functionality.
 
    Available commands:
-   - `python cli.py ollama` - Test Ollama server connectivity
-   - `python cli.py data` - Test data loading functionality
-   - `python cli.py graph` - Test graph extraction (requires Ollama)
-   - `python cli.py all` - Run all tests
-   - `python cli.py info` - Show project information
+   - `uv run cli.py ollama` - Test Ollama server connectivity
+   - `uv run cli.py data` - Test data loading functionality
+   - `uv run cli.py graph` - Test graph extraction (requires Ollama)
+   - `uv run cli.py all` - Run all tests
+   - `uv run cli.py info` - Show project information
+
+   **Note:** No need to activate virtual environments - `uv run` handles everything automatically!
 
 ## Initializing Eval Dataset
 To understand the problem and its solution, we need to have evaluation data on which we can perform several tests to understand how BAML is improving our LangChain knowledge graphs.
