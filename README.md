@@ -58,6 +58,12 @@ This project uses [uv](https://github.com/astral-sh/uv) for dependency managemen
    .venv\Scripts\activate     # On Windows
    ```
 
+5. Run the interactive testing CLI:
+   ```bash
+   graphrag-test
+   ```
+   This launches a beautiful terminal user interface where you can run tests, view results, and monitor the GraphRAG functionality interactively.
+
 ## Initializing Eval Dataset
 To understand the problem and its solution, we need to have evaluation data on which we can perform several tests to understand how BAML is improving our LangChain knowledge graphs.
 
