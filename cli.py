@@ -228,6 +228,208 @@ def graph():
 
 
 @app.command()
+def compare():
+    """Compare standard LangChain vs BAML graph extraction performance."""
+    console.print(
+        "[bold green]🔬 Comparing LangChain vs BAML Graph Extraction[/bold green]"
+    )
+    console.print(
+        "[yellow]⚠️  This test takes time as it processes real articles with LLM calls[/yellow]"
+    )
+    console.print()
+
+    # Test data - use just 2 articles for manageable timing
+    import pandas as pd
+
+    console.print("[bold blue]📊 Loading test data...[/bold blue]")
+    news = pd.read_csv(
+        "https://raw.githubusercontent.com/tomasonjo/blog-datasets/main/news_articles.csv",
+        nrows=5,  # Load only 5 rows
+    )
+
+    test_articles = [
+        f"{row['title']} {row['text']}"[:500] for i, row in news.head(2).iterrows()
+    ]  # 2 short articles
+
+    console.print(f"✅ Loaded {len(test_articles)} test articles (shortened for speed)")
+    console.print()
+
+    # Test 1: Standard LangChain LLMGraphTransformer
+    console.print(
+        "[bold blue]🔗 Testing Standard LangChain LLMGraphTransformer[/bold blue]"
+    )
+
+    from langchain_ollama import ChatOllama
+    from langchain_experimental.graph_transformers import LLMGraphTransformer
+    from langchain_core.documents import Document
+
+    llm = ChatOllama(model="gpt-oss", temperature=0.001)
+    langchain_transformer = LLMGraphTransformer(
+        llm=llm,
+        node_properties=["description"],
+        relationship_properties=["description"],
+    )
+
+    langchain_success = 0
+    langchain_total = len(test_articles)
+
+    for i, article in enumerate(test_articles):
+        console.print(f"  Processing article {i + 1}/{langchain_total}...")
+        try:
+            doc = Document(page_content=article)
+            result = langchain_transformer.convert_to_graph_documents([doc])
+            if result and result[0].nodes:
+                langchain_success += 1
+                console.print(f"  ✅ Success")
+            else:
+                console.print(f"  ❌ No nodes extracted")
+        except Exception as e:
+            console.print(f"  ❌ Failed: {str(e)[:50]}...")
+
+    langchain_rate = (langchain_success / langchain_total) * 100
+    console.print(
+        f"✅ LangChain: {langchain_success}/{langchain_total} articles processed ({langchain_rate:.1f}% success)"
+    )
+    console.print()
+
+    # Test 2: BAML Implementation
+    console.print("[bold blue]🎯 Testing BAML Graph Extraction[/bold blue]")
+
+    try:
+        import baml_client as client
+        from langchain_core.runnables import chain
+        from typing import Any, List
+        from langchain_community.graphs.graph_document import (
+            GraphDocument as LGGraphDocument,
+            Node,
+            Relationship,
+        )
+
+        # Helper functions from the README
+        def _format_nodes(nodes: List[Node]) -> List[Node]:
+            return [
+                Node(
+                    id=el.id.title() if isinstance(el.id, str) else el.id,
+                    type=el.type.capitalize() if el.type else "Unknown",
+                    properties=el.properties,
+                )
+                for el in nodes
+            ]
+
+        def map_to_base_relationship(rel: Any) -> Relationship:
+            source = Node(id=rel.source_node_id, type=rel.source_node_type)
+            target = Node(id=rel.target_node_id, type=rel.target_node_type)
+            return Relationship(
+                source=source, target=target, type=rel.type, properties=rel.properties
+            )
+
+        def _format_relationships(rels) -> List[Relationship]:
+            relationships = [
+                map_to_base_relationship(rel)
+                for rel in rels
+                if rel.type and rel.source_node_id and rel.target_node_id
+            ]
+            return [
+                Relationship(
+                    source=_format_nodes([el.source])[0],
+                    target=_format_nodes([el.target])[0],
+                    type=el.type.replace(" ", "_").upper(),
+                    properties=el.properties,
+                )
+                for el in relationships
+            ]
+
+        @chain
+        def get_graph(message):
+            graph = client.b.ExtractGraph(graph=message.content)
+            return graph
+
+        # Create BAML-powered chain
+        from langchain_core.prompts import ChatPromptTemplate
+
+        system_prompt = """
+        You are a knowledgeable assistant skilled in extracting entities and their relationships from text.
+        Your goal is to create a knowledge graph.
+        """
+
+        default_prompt = ChatPromptTemplate.from_messages(
+            [
+                ("system", system_prompt),
+                (
+                    "human",
+                    (
+                        "Tip: Make sure to answer in the correct format and do not include any explanations. "
+                        "Use the given format to extract information from the following input: {input}"
+                    ),
+                ),
+            ]
+        )
+
+        baml_chain = default_prompt | llm | get_graph
+
+        baml_success = 0
+        baml_total = len(test_articles)
+
+        for i, article in enumerate(test_articles):
+            console.print(f"  Processing article {i + 1}/{baml_total}...")
+            try:
+                result = baml_chain.invoke({"input": article})
+                if result and hasattr(result, "nodes") and result.nodes:
+                    baml_success += 1
+                    console.print(f"  ✅ Success")
+                else:
+                    console.print(f"  ❌ No nodes extracted")
+            except Exception as e:
+                console.print(f"  ❌ Failed: {str(e)[:50]}...")
+
+        baml_rate = (baml_success / baml_total) * 100
+        console.print(
+            f"✅ BAML: {baml_success}/{baml_total} articles processed ({baml_rate:.1f}% success)"
+        )
+        console.print()
+
+    except ImportError:
+        console.print("[red]❌ BAML client not available[/red]")
+        baml_rate = 0
+
+    # Results comparison
+    console.print("[bold green]📊 Performance Comparison[/bold green]")
+
+    table = Table(title="🧪 LangChain vs BAML Graph Extraction")
+    table.add_column("Method", style="cyan", no_wrap=True)
+    table.add_column("Success Rate", justify="center")
+    table.add_column("Improvement", justify="center")
+
+    table.add_row("Standard LangChain", f"{langchain_rate:.1f}%", "-")
+    table.add_row(
+        "LangChain + BAML",
+        f"{baml_rate:.1f}%",
+        f"+{baml_rate - langchain_rate:.1f}%"
+        if baml_rate > langchain_rate
+        else f"{baml_rate - langchain_rate:.1f}%",
+    )
+
+    console.print(table)
+
+    # Summary
+    if baml_rate > langchain_rate:
+        improvement = baml_rate - langchain_rate
+        console.print(
+            f"[green]🎉 BAML improved success rate by {improvement:.1f}%![/green]"
+        )
+        console.print(
+            "[dim]This demonstrates BAML's fuzzy parsing advantage over strict JSON parsing.[/dim]"
+        )
+    else:
+        console.print(
+            "[yellow]⚠️ No significant improvement detected in this small sample.[/yellow]"
+        )
+        console.print(
+            "[dim]Try with more articles or different content for better comparison.[/dim]"
+        )
+
+
+@app.command()
 def all():
     """Run all tests."""
     runner = TestRunner()
@@ -261,19 +463,22 @@ def info():
     info_text = """
 🎯 GraphRAG Testing CLI
 
-This CLI provides interactive testing for LangChain BAML GraphRAG functionality.
+This CLI provides interactive testing for LangChain BAML GraphRAG functionality,
+including performance comparisons between standard LangChain and BAML-enhanced approaches.
 
 Available commands:
   • ollama  - Test Ollama server connectivity
   • data    - Test data loading functionality
   • graph   - Test graph extraction (requires Ollama)
+  • compare - Compare LangChain vs BAML performance
   • all     - Run all tests
   • info    - Show this information
 
 Usage examples:
-  python cli.py ollama
-  python cli.py data
-  python cli.py all
+  uv run cli.py ollama
+  uv run cli.py data
+  uv run cli.py compare  # 🔥 Key feature: performance comparison
+  uv run cli.py all
     """
 
     panel = Panel.fit(info_text.strip(), title="ℹ️ Information", border_style="cyan")
