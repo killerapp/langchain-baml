@@ -5,6 +5,7 @@ Graph RAG Testing CLI - Interactive CLI for testing LangChain BAML GraphRAG func
 
 import time
 import asyncio
+import os
 from typing import Optional
 from pathlib import Path
 
@@ -22,6 +23,8 @@ from rich.progress import (
     BarColumn,
     TimeElapsedColumn,
 )
+
+from langchain_ollama import ChatOllama
 
 from tests.test_ollama import (
     test_ollama_connection,
@@ -192,16 +195,58 @@ def main():
 
 @app.command()
 def ollama():
-    """Test Ollama server connectivity."""
-    runner = TestRunner()
+    """Test Ollama server connectivity with concise output."""
+    console.print("[bold blue]🔗 Ollama Server Status[/bold blue]")
 
-    console.print("[bold blue]🔗 Testing Ollama Connection[/bold blue]")
-    runner.run_test(test_ollama_connection, "Ollama Connection")
-    runner.run_test(test_gpt_oss_available, "GPT-OSS Available")
-    runner.run_test(test_chat_ollama_gpt_oss, "ChatOllama GPT-OSS")
+    # Show configuration
+    host = os.getenv("OLLAMA_HOST", "localhost")
+    console.print(f"[dim]OLLAMA_HOST:[/dim] {host}")
+    console.print(f"[dim]Base URL:[/dim] http://{host}:11434")
 
-    runner.show_results()
-    runner.show_stats()
+    try:
+        import ollama
+
+        client = ollama.Client(host=f"http://{host}:11434")
+
+        # Get version info
+        try:
+            # Try ps command to get version
+            import subprocess
+
+            result = subprocess.run(
+                ["ollama", "version"], capture_output=True, text=True, timeout=5
+            )
+            if result.returncode == 0:
+                console.print(f"[dim]Version:[/dim] {result.stdout.strip()}")
+            else:
+                console.print("[dim]Version:[/dim] Unable to detect")
+        except:
+            console.print("[dim]Version:[/dim] Unable to detect")
+
+        # List models
+        models = client.list()
+        model_list = [m.model for m in models.get("models", [])]
+        if model_list:
+            console.print(f"[dim]Available models ({len(model_list)}):[/dim]")
+            for model in sorted(model_list):
+                marker = " ← current" if "gpt-oss" in model else ""
+                console.print(f"  • {model}{marker}")
+        else:
+            console.print("[dim]Available models:[/dim] None found")
+
+        # Test basic connectivity
+        console.print("\n[dim]Testing connectivity...[/dim]")
+        llm = ChatOllama(model="gpt-oss", temperature=0.001)
+        response = llm.invoke("Say 'OK' in one word.")
+        if response and hasattr(response, "content") and response.content:
+            content = str(response.content).strip()
+            console.print("[green]✅ Connection successful[/green]")
+            console.print(f"[dim]Test response:[/dim] {content}")
+        else:
+            console.print("[red]❌ Connection failed - no response[/red]")
+
+    except Exception as e:
+        console.print(f"[red]❌ Connection failed: {str(e)[:100]}...[/red]")
 
 
 @app.command()
