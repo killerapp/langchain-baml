@@ -1,0 +1,30 @@
+[project]
+name = "langchain-baml"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "baml-py>=0.213.0",
+    "graphdatascience>=1.17",
+    "jupyterlab>=4.5.0",
+    "langchain>=1.0.8",
+    "langchain-community>=0.4.1",
+    "langchain-core>=1.0.7",
+    "langchain-experimental>=0.4.0",
+    "langchain-ollama>=1.0.0",
+    "matplotlib>=3.10.7",
+    "neo4j>=5.28.2",
+    "notebook>=7.5.0",
+    "numpy>=2.2.6",
+    "pandas>=2.3.3",
+    "pydantic>=2.12.4",
+    "seaborn>=0.13.2",
+    "tiktoken>=0.12.0",
+    "tqdm>=4.67.1",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.1",
+]

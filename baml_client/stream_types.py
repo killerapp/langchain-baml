@@ -12,34 +12,16 @@
 
 import typing
 import typing_extensions
-from enum import Enum
-
-
 from pydantic import BaseModel, ConfigDict
-
 
 import baml_py
 
-CheckT = typing_extensions.TypeVar('CheckT')
-CheckName = typing_extensions.TypeVar('CheckName', bound=str)
+from . import types
 
-class Check(BaseModel):
-    name: str
-    expression: str
-    status: str
-class Checked(BaseModel, typing.Generic[CheckT, CheckName]):
-    value: CheckT
-    checks: typing.Dict[CheckName, Check]
-
-def get_checks(checks: typing.Dict[CheckName, Check]) -> typing.List[Check]:
-    return list(checks.values())
-
-def all_succeeded(checks: typing.Dict[CheckName, Check]) -> bool:
-    return all(check.status == "succeeded" for check in get_checks(checks))
-# #########################################################################
-# Generated enums (0)
-# #########################################################################
-
+StreamStateValueT = typing.TypeVar('StreamStateValueT')
+class StreamState(BaseModel, typing.Generic[StreamStateValueT]):
+    value: StreamStateValueT
+    state: typing_extensions.Literal["Pending", "Incomplete", "Complete"]
 # #########################################################################
 # Generated classes (6)
 # #########################################################################
@@ -55,23 +37,23 @@ class Properties(BaseModel):
     description: typing.Optional[str] = None
 
 class Resume(BaseModel):
-    name: str
-    email: str
+    name: typing.Optional[str] = None
+    email: typing.Optional[str] = None
     experience: typing.List[str]
     skills: typing.List[str]
 
 class SimpleNode(BaseModel):
-    id: str
-    type: str
-    properties: "Properties"
+    id: typing.Optional[str] = None
+    type: typing.Optional[str] = None
+    properties: typing.Optional["Properties"] = None
 
 class SimpleRelationship(BaseModel):
-    source_node_id: str
-    source_node_type: str
-    target_node_id: str
-    target_node_type: str
-    type: str
-    properties: "Properties"
+    source_node_id: typing.Optional[str] = None
+    source_node_type: typing.Optional[str] = None
+    target_node_id: typing.Optional[str] = None
+    target_node_type: typing.Optional[str] = None
+    type: typing.Optional[str] = None
+    properties: typing.Optional["Properties"] = None
 
 # #########################################################################
 # Generated type aliases (0)

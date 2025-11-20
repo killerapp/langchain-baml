@@ -1,7 +1,7 @@
 <!-- omit in toc -->
 # Graph RAG using Fuzzy Parsing
 
-[![Python 3.10](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/release/python-3100/) [![LangChain](https://img.shields.io/badge/LangChain-Framework-purple)](https://www.langchain.com/) [![Ollama](https://img.shields.io/badge/Ollama-Local--LLMs-green)](https://ollama.com/) [![Neo4j](https://img.shields.io/badge/Neo4j-Graph%20DBms-blueviolet)](https://neo4j.com/) [![Medium](https://img.shields.io/badge/Medium-Blog-black?logo=medium)](https://medium.com/@fareedkhandev/improving-langchain-knowledge-graph-rag-using-fuzzy-parsing-a2413b2a4613)
+[![Python 3.12](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/release/python-3120/) [![LangChain](https://img.shields.io/badge/LangChain-Framework-purple)](https://www.langchain.com/) [![Ollama](https://img.shields.io/badge/Ollama-Local--LLMs-green)](https://ollama.com/) [![Neo4j](https://img.shields.io/badge/Neo4j-Graph%20DBms-blueviolet)](https://neo4j.com/) [![Medium](https://img.shields.io/badge/Medium-Blog-black?logo=medium)](https://medium.com/@fareedkhandev/improving-langchain-knowledge-graph-rag-using-fuzzy-parsing-a2413b2a4613)
 
 
 One of the most common challenges when building knowledge graph-based RAG systems or agents with LangChain is the inability to reliably extract nodes and relationships from unstructured data especially when using smaller, quantized local LLMs. This often results in poor performance of your AI product.
@@ -34,6 +34,29 @@ All the code is available in my GitHub Repo:
 - [Community Detection with Leiden Algorithm](#community-detection-with-leiden-algorithm)
 - [Analyzing the Final Graph Structure](#analyzing-the-final-graph-structure)
 - [Conclusion](#conclusion)
+
+## Installation
+
+This project uses [uv](https://github.com/astral-sh/uv) for dependency management.
+
+1. Install uv if you haven't already:
+   ```bash
+   curl -LsSf https://astral.sh/uv/install.sh | sh
+   ```
+
+2. Clone the repository and navigate to the project directory.
+
+3. Install dependencies:
+   ```bash
+   uv sync
+   ```
+
+4. Activate the virtual environment:
+   ```bash
+   source .venv/bin/activate  # On macOS/Linux
+   # or
+   .venv\Scripts\activate     # On Windows
+   ```
 
 ## Initializing Eval Dataset
 To understand the problem and its solution, we need to have evaluation data on which we can perform several tests to understand how BAML is improving our LangChain knowledge graphs.
@@ -116,7 +139,7 @@ Ollama is the chosen platform here, but LangChain supports many API and local LL
 from langchain_ollama import ChatOllama
 
 # Define the model name to be used
-model = "llama3"
+model = "gpt-oss"
 
 # Initialize the ChatOllama language model
 # The 'temperature' parameter controls the randomness of the output.
@@ -142,11 +165,11 @@ ollama list
 ```
 If it’s running but you have no models yet, you’ll see an empty list of models, which is perfectly fine at this stage. If you get a “command not found” error, make sure Ollama was installed correctly. If you get a connection error, the server isn’t running.
 
-You can simply download llama3 using pull command. This will take some time and several gigabytes of disk space, as the models are large.
+You can simply download gpt-oss using pull command. This will take some time and several gigabytes of disk space, as the models are large.
 
 ```bash
-# Downloading llama3 model
-ollama pull llama3
+# Downloading gpt-oss model
+ollama pull gpt-oss
 ```
 After these commands finish, you can run `ollama list` again, and you should now see model listed.
 
@@ -157,7 +180,7 @@ curl http://localhost:11434/api/generate \
     -H "Content-Type: application/json" \
     # Provide the data for the request
     -d '{
-        "model": "llama3",
+        "model": "gpt-oss",
         "prompt": "Why is the sky blue?"
     }'
 
@@ -178,7 +201,7 @@ A proper way to transform raw or structured data into knowledge graphs using Lan
 
 This tool is designed as an all-in-one solution: provide it with your text and an LLM, and it takes care of the prompting and parsing to return a graph structure.
 
-Let’s see how it performs with our local `llama3` model.
+Let’s see how it performs with our local `gpt-oss` model.
 
 First, we need to import all the necessary components.
 
@@ -190,12 +213,12 @@ from langchain_experimental.graph_transformers import LLMGraphTransformer
 from langchain_community.graphs.graph_document import GraphDocument, Node, Relationship
 from langchain_core.documents import Document
 ```
-Now, let’s initialize the transformer. We will use the `llm` object we created earlier (which is our `llama3` model).
+Now, let’s initialize the transformer. We will use the `llm` object we created earlier (which is our `gpt-oss` model).
 
 We also need to tell the transformer what extra information, or "properties" we want it to extract for our nodes and relationships. For this example, we'll just ask for a `description`.
 
 ```python
-# Initialize the LLMGraphTransformer with our llama3 model
+# Initialize the LLMGraphTransformer with our gpt-oss model
 # We specify that we want a 'description' property for both nodes and relationships
 llm_transformer = LLMGraphTransformer(
     llm=llm,
@@ -307,7 +330,7 @@ This is where the problem lies, and it’s a common one. The standard approach i
 ## Will improving the Prompt work?
 A 75% failure rate is a huge problem. As developers, our first instinct when an LLM doesn’t perform well is often to tweak the prompt. Better instructions should lead to better results, right? The `LLMGraphTransformer` uses a default prompt internally, but we can't easily modify it.
 
-So, let’s build our own simple chain using Langchain `ChatPromptTemplate`. This gives us full control over the instructions we send to `llama3`. We can be more explicit and try to "guide" the model into generating the correct JSON format every single time.
+So, let’s build our own simple chain using Langchain `ChatPromptTemplate`. This gives us full control over the instructions we send to `gpt-oss`. We can be more explicit and try to "guide" the model into generating the correct JSON format every single time.
 
 Let’s start by defining the output structure we want using Pydantic models. This is a common pattern in Langchain for structured output.
 
@@ -415,7 +438,7 @@ print(f"Number of JSON parsing errors: {len(errors)}")
 Percentage missing with improved prompt: 62.0%
 Number of JSON parsing errors: 13
 ```
-The result? A failure rate of ~**62%**. While this is a slight improvement from our initial 75%, it’s nowhere near reliable enough. We still failed to extract a graph from 13 out of 20 articles. The `JsonOutputParser` threw an error each time because `llama3`, despite our best efforts with prompting, still produced malformed JSON.
+The result? A failure rate of ~**62%**. While this is a slight improvement from our initial 75%, it’s nowhere near reliable enough. We still failed to extract a graph from 13 out of 20 articles. The `JsonOutputParser` threw an error each time because `gpt-oss`, despite our best efforts with prompting, still produced malformed JSON.
 
 This demonstrates a fundamental limitation:
 
@@ -435,10 +458,7 @@ This is where BAML (Basically, A Made-up Language) can be very important. BAML o
 
 First, you’ll need to install the BAML client and its VS Code extension.
 
-```bash
-# Installing baml client
-pip install baml-py
-```
+The BAML client (`baml-py`) is already included in the project dependencies and will be installed when you run `uv sync`.
 Search for `baml` in the VS Code marketplace and install the extension. This extension is fantastic because it gives you an interactive playground to test your prompts and schemas without having to run your Python code every time.
 
 Next, we define our graph extraction logic in a `.baml` file. Think of this as a configuration file for our LLM calls. We'll create a file named `extract_graph.baml`:
@@ -784,14 +804,14 @@ For example, the 90th percentile is a degree of 4, but the maximum degree is 37.
 
 To find entities that are semantically similar (even if they have different names), we need to create vector embeddings for them. An embedding is a numerical representation of a piece of text. We’ll generate embeddings for each entity’s `id` and `description` and store them in the graph.
 
-We will use the `llama3` model via Ollama for embeddings and Langchain's `Neo4jVector` to handle the process.
+We will use the `gpt-oss` model via Ollama for embeddings and Langchain's `Neo4jVector` to handle the process.
 
 ```python
 from langchain_community.vectorstores import Neo4jVector
 from langchain_ollama import OllamaEmbeddings
 
-# Create embeddings using our local llama3 model
-embeddings = OllamaEmbeddings(model="llama3")
+# Create embeddings using our local gpt-oss model
+embeddings = OllamaEmbeddings(model="gpt-oss")
 
 # Initialize the Neo4jVector instance to manage embeddings in the graph
 vector = Neo4jVector.from_existing_graph(
@@ -984,7 +1004,7 @@ The results are clear. While standard Langchain tools provide a quick way to get
 By introducing BAML, we addressed the core issues of overly complex prompts and strict JSON parsing. The outcome was a dramatic increase in success rate from **25% to over 99%**, transforming a failing experiment into a robust and scalable pipeline for building knowledge graphs.
 
 Here’s a quick recap of the key steps we’ve taken:
-- We began by preparing a news article dataset and setting up a local llama3 model with Ollama.
+- We began by preparing a news article dataset and setting up a local gpt-oss model with Ollama.
 - Our first test using Langchain’s LLMGraphTransformer failed 75% of the time due to strict JSON parsing.
 - Attempting to fix this with advanced prompt engineering only slightly improved the failure rate to ~62%.
 - We then integrated BAML, leveraging its simplified schemas and robust parser to achieve a **99.4% success rate** in graph extraction.
