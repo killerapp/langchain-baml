@@ -68,8 +68,11 @@ This project uses [uv](https://github.com/astral-sh/uv) for dependency managemen
    - `uv run cli.py ollama` - Test Ollama server connectivity
    - `uv run cli.py data` - Test data loading functionality
    - `uv run cli.py graph` - Test graph extraction (requires Ollama)
+   - `uv run cli.py compare` - 🔥 **KEY FEATURE**: Compare LangChain vs BAML performance
    - `uv run cli.py all` - Run all tests
    - `uv run cli.py info` - Show project information
+
+   **The `compare` command demonstrates the core value proposition**: BAML's fuzzy parsing dramatically improves graph extraction success rates compared to standard LangChain's strict JSON parsing.
 
    **Note:** No need to activate virtual environments - `uv run` handles everything automatically!
 
