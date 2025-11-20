@@ -324,7 +324,7 @@ def ollama():
 
         # Test basic connectivity
         console.print("\n[dim]Testing connectivity...[/dim]")
-        llm = ChatOllama(model="gpt-oss", temperature=0.001)
+        llm = ChatOllama(model="llama3.2:1b", temperature=0.001)
         response = llm.invoke("Say 'OK' in one word.")
         if response and hasattr(response, "content") and response.content:
             content = str(response.content).strip()
@@ -404,7 +404,7 @@ def compare(
     from langchain_experimental.graph_transformers import LLMGraphTransformer
     from langchain_core.documents import Document
 
-    llm = ChatOllama(model="gpt-oss", temperature=0.001)
+    llm = ChatOllama(model="llama3.2:1b", temperature=0.001)
     langchain_transformer = LLMGraphTransformer(
         llm=llm,
         node_properties=["description"],

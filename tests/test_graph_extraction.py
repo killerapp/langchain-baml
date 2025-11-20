@@ -24,7 +24,7 @@ news["tokens"] = [
 ]
 
 # Initialize LLM
-llm = ChatOllama(model="gpt-oss", temperature=0.001)
+llm = ChatOllama(model="llama3.2:1b", temperature=0.001)
 
 # Initialize transformer
 llm_transformer = LLMGraphTransformer(

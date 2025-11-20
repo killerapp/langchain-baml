@@ -67,8 +67,8 @@ client<llm> Localllm {
 client<llm> Ollama {
   provider ollama
   options {
-    base_url "http://192.168.86.20:11434"
-    model gpt-oss
+    base_url "http://localhost:11434"
+    model llama3.2:1b
     temperature 0.001
   }
 }
