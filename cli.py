@@ -134,8 +134,9 @@ class GraphRAGTester(App):
     def on_list_view_selected(self, event: ListView.Selected) -> None:
         """Handle test selection."""
         selected_item = event.item
-        # Get the plain text content from the ListItem
-        test_name = selected_item.plain
+        # Get the text from the Label widget inside the ListItem
+        label_widget = selected_item.query_one(Label)
+        test_name = label_widget.label
 
         if "Ollama" in test_name:
             self.run_ollama_tests()
