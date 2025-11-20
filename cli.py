@@ -1,30 +1,27 @@
 #!/usr/bin/env python3
 """
-Graph RAG Testing CLI - Interactive TUI for testing LangChain BAML GraphRAG functionality
+Graph RAG Testing CLI - Interactive CLI for testing LangChain BAML GraphRAG functionality
 """
 
+import time
 import asyncio
-from pathlib import Path
 from typing import Optional
+from pathlib import Path
 
-from textual.app import App, ComposeResult
-from textual.containers import Container, Horizontal, Vertical
-from textual.widgets import (
-    Button,
-    DataTable,
-    Footer,
-    Header,
-    Label,
-    ListView,
-    ListItem,
-    Log,
-    ProgressBar,
-    Static,
-    TabbedContent,
-    TabPane,
+import typer
+from rich.console import Console
+from rich.table import Table
+from rich.panel import Panel
+from rich.text import Text
+from rich.live import Live
+from rich.spinner import Spinner
+from rich.progress import (
+    Progress,
+    SpinnerColumn,
+    TextColumn,
+    BarColumn,
+    TimeElapsedColumn,
 )
-from textual import events
-from textual.binding import Binding
 
 from tests.test_ollama import (
     test_ollama_connection,
@@ -32,264 +29,256 @@ from tests.test_ollama import (
     test_chat_ollama_gpt_oss,
 )
 
+app = typer.Typer(
+    name="graphrag-test",
+    help="Interactive CLI for testing GraphRAG functionality",
+    add_completion=False,
+)
+console = Console()
 
-class GraphRAGTester(App):
-    """Interactive TUI for testing GraphRAG functionality."""
 
-    CSS = """
-    Screen {
-        background: $surface;
-    }
-
-    Container {
-        height: 100%;
-        padding: 1;
-    }
-
-    #sidebar {
-        width: 30;
-        background: $panel;
-        border-right: solid $primary;
-    }
-
-    #main-content {
-        width: 100%;
-        height: 100%;
-    }
-
-    Button {
-        margin: 1;
-    }
-
-    ProgressBar {
-        margin: 1 0;
-    }
-
-    DataTable {
-        height: 100%;
-    }
-
-    Log {
-        height: 100%;
-        background: $surface;
-        border: solid $primary;
-    }
-    """
-
-    BINDINGS = [
-        Binding("q", "quit", "Quit"),
-        Binding("r", "run_all", "Run All Tests"),
-        Binding("c", "clear", "Clear Results"),
-    ]
+class TestRunner:
+    """Handles test execution and results."""
 
     def __init__(self):
-        super().__init__()
-        self.test_results = {}
-        self.current_test = None
+        self.results = []
+        self.stats = {"total": 0, "passed": 0, "failed": 0}
 
-    def compose(self) -> ComposeResult:
-        yield Header()
-        with Container():
-            with Horizontal():
-                with Vertical(id="sidebar"):
-                    yield Label("🧪 GraphRAG Tests", classes="title")
-                    yield ListView(
-                        ListItem(Label("🔗 Ollama Connection")),
-                        ListItem(Label("📊 Data Loading")),
-                        ListItem(Label("🕸️ Graph Extraction")),
-                        id="test-list",
-                    )
-                    yield Button("Run All Tests", id="run-all", variant="primary")
-                    yield Button("Clear Results", id="clear")
-
-                with Vertical(id="main-content"):
-                    with TabbedContent():
-                        with TabPane("Results", id="results"):
-                            yield DataTable(id="results-table")
-                        with TabPane("Logs", id="logs"):
-                            yield Log(id="test-log", auto_scroll=True)
-                        with TabPane("Stats", id="stats"):
-                            yield Static(id="stats-display")
-
-        yield Footer()
-
-    def on_mount(self) -> None:
-        """Initialize the interface."""
-        table = self.query_one("#results-table", DataTable)
-        table.add_columns("Test", "Status", "Duration", "Details")
-        table.zebra_stripes = True
-
-        log = self.query_one("#test-log", Log)
-        log.write(
-            "GraphRAG Testing CLI initialized. Press 'r' to run all tests or select individual tests.\n"
-        )
-
-    def on_button_pressed(self, event: Button.Pressed) -> None:
-        """Handle button presses."""
-        if event.button.id == "run-all":
-            self.run_all_tests()
-        elif event.button.id == "clear":
-            self.clear_results()
-
-    def on_list_view_selected(self, event: ListView.Selected) -> None:
-        """Handle test selection."""
-        selected_item = event.item
-        # Get the label text directly from the ListItem
-        test_name = selected_item.label
-
-        if "Ollama" in test_name:
-            self.run_ollama_tests()
-        elif "Data" in test_name:
-            self.run_data_tests()
-        elif "Graph" in test_name:
-            self.run_graph_tests()
-
-    async def run_test_async(self, test_func, test_name: str):
-        """Run a test asynchronously and update UI."""
-        import time
-
+    def run_test(self, test_func, test_name: str, description: str = ""):
+        """Run a single test and record results."""
         start_time = time.time()
 
-        log = self.query_one("#test-log", Log)
-        log.write(f"🔄 Running {test_name}...\n")
+        with console.status(
+            f"[bold green]Running {test_name}...[/bold green]"
+        ) as status:
+            try:
+                if asyncio.iscoroutinefunction(test_func):
+                    result = asyncio.run(test_func())
+                else:
+                    result = test_func()
 
-        try:
-            if asyncio.iscoroutinefunction(test_func):
-                result = await test_func()
-            else:
-                result = test_func()
+                duration = time.time() - start_time
+                status = "✅ PASS"
+                details = "Success"
 
-            duration = time.time() - start_time
-            status = "✅ PASS"
-            details = "Success"
+                console.print(
+                    f"[green]✅ {test_name} completed in {duration:.2f}s[/green]"
+                )
 
-            log.write(f"✅ {test_name} completed in {duration:.2f}s\n")
+            except Exception as e:
+                duration = time.time() - start_time
+                status = "❌ FAIL"
+                details = str(e)
+                console.print(f"[red]❌ {test_name} failed: {e}[/red]")
 
-        except Exception as e:
-            duration = time.time() - start_time
-            status = "❌ FAIL"
-            details = str(e)
-            log.write(f"❌ {test_name} failed: {e}\n")
-
-        # Update results table
-        table = self.query_one("#results-table", DataTable)
-        table.add_row(test_name, status, f"{duration:.2f}s", details)
-
-        # Update stats
-        self.update_stats()
-
-    def run_ollama_tests(self):
-        """Run Ollama connectivity tests."""
-        asyncio.create_task(
-            self.run_test_async(test_ollama_connection, "Ollama Connection")
-        )
-        asyncio.create_task(
-            self.run_test_async(test_gpt_oss_available, "GPT-OSS Available")
-        )
-        asyncio.create_task(
-            self.run_test_async(test_chat_ollama_gpt_oss, "ChatOllama GPT-OSS")
+        self.results.append(
+            {
+                "name": test_name,
+                "status": status,
+                "duration": f"{duration:.2f}s",
+                "details": details,
+            }
         )
 
-    def run_data_tests(self):
-        """Run data loading tests."""
-        # Since data loading is synchronous, run in thread
-        import concurrent.futures
+        if "PASS" in status:
+            self.stats["passed"] += 1
+        else:
+            self.stats["failed"] += 1
+        self.stats["total"] += 1
 
-        with concurrent.futures.ThreadPoolExecutor() as executor:
-            future = executor.submit(self._run_data_test_sync)
-            asyncio.create_task(self._handle_data_test_result(future))
+    def run_data_test(self):
+        """Run data loading test."""
+        start_time = time.time()
 
-    async def _handle_data_test_result(self, future):
-        """Handle the result of the data test."""
-        try:
-            result = await asyncio.get_event_loop().run_in_executor(None, future.result)
-            table = self.query_one("#results-table", DataTable)
-            table.add_row("Data Loading", "✅ PASS", "N/A", f"Loaded {result} articles")
-            log = self.query_one("#test-log", Log)
-            log.write(f"✅ Data loading completed: {result} articles\n")
-        except Exception as e:
-            table = self.query_one("#results-table", DataTable)
-            table.add_row("Data Loading", "❌ FAIL", "N/A", str(e))
-            log = self.query_one("#test-log", Log)
-            log.write(f"❌ Data loading failed: {e}\n")
+        with console.status(
+            "[bold green]Running Data Loading test...[/bold green]"
+        ) as status:
+            try:
+                import pandas as pd
 
-    def _run_data_test_sync(self):
-        """Run data loading test synchronously."""
-        import pandas as pd
-        import tiktoken
+                # Load just a sample to make it faster
+                news = pd.read_csv(
+                    "https://raw.githubusercontent.com/tomasonjo/blog-datasets/main/news_articles.csv",
+                    nrows=100,  # Load only first 100 rows for speed
+                )
 
-        news = pd.read_csv(
-            "https://raw.githubusercontent.com/tomasonjo/blog-datasets/main/news_articles.csv"
+                article_count = len(news)
+                duration = time.time() - start_time
+
+                console.print(
+                    f"[green]✅ Data Loading completed: {article_count} articles loaded in {duration:.2f}s[/green]"
+                )
+
+                self.results.append(
+                    {
+                        "name": "Data Loading",
+                        "status": "✅ PASS",
+                        "duration": f"{duration:.2f}s",
+                        "details": f"Loaded {article_count} articles",
+                    }
+                )
+                self.stats["passed"] += 1
+
+            except Exception as e:
+                duration = time.time() - start_time
+                console.print(f"[red]❌ Data Loading failed: {e}[/red]")
+
+                self.results.append(
+                    {
+                        "name": "Data Loading",
+                        "status": "❌ FAIL",
+                        "duration": f"{duration:.2f}s",
+                        "details": str(e),
+                    }
+                )
+                self.stats["failed"] += 1
+
+        self.stats["total"] += 1
+
+    def show_results(self):
+        """Display test results in a table."""
+        table = Table(title="🧪 GraphRAG Test Results")
+        table.add_column("Test", style="cyan", no_wrap=True)
+        table.add_column("Status", justify="center")
+        table.add_column("Duration", justify="right")
+        table.add_column("Details", style="dim")
+
+        for result in self.results:
+            status_style = "green" if "PASS" in result["status"] else "red"
+            table.add_row(
+                result["name"],
+                f"[{status_style}]{result['status']}[/{status_style}]",
+                result["duration"],
+                result["details"],
+            )
+
+        console.print(table)
+
+    def show_stats(self):
+        """Display test statistics."""
+        success_rate = (
+            (self.stats["passed"] / self.stats["total"] * 100)
+            if self.stats["total"] > 0
+            else 0
         )
-
-        def num_tokens_from_string(string: str, model: str = "gpt-4o") -> int:
-            encoding = tiktoken.encoding_for_model(model)
-            num_tokens = len(encoding.encode(string))
-            return num_tokens
-
-        news["tokens"] = [
-            num_tokens_from_string(f"{row['title']} {row['text']}")
-            for i, row in news.iterrows()
-        ]
-
-        return len(news)
-
-    def run_graph_tests(self):
-        """Run graph extraction tests."""
-        # This would be more complex, so for now just show it's not implemented
-        log = self.query_one("#test-log", Log)
-        log.write("🕸️ Graph extraction test requires Ollama server to be running.\n")
-        log.write("Please ensure Ollama is accessible at the configured host.\n")
-
-    def run_all_tests(self):
-        """Run all test suites."""
-        log = self.query_one("#test-log", Log)
-        log.write("🚀 Running all GraphRAG tests...\n")
-
-        self.run_ollama_tests()
-        self.run_data_tests()
-        self.run_graph_tests()
-
-    def clear_results(self):
-        """Clear all results and logs."""
-        table = self.query_one("#results-table", DataTable)
-        table.clear()
-        table.add_columns("Test", "Status", "Duration", "Details")
-
-        log = self.query_one("#test-log", Log)
-        log.clear()
-        log.write("Results cleared. Ready to run tests.\n")
-
-        stats = self.query_one("#stats-display", Static)
-        stats.update("No tests run yet.")
-
-    def update_stats(self):
-        """Update the stats display."""
-        table = self.query_one("#results-table", DataTable)
-        rows = table.rows
-
-        total = len(rows)
-        passed = sum(1 for row in rows if "✅" in row[1])
-        failed = sum(1 for row in rows if "❌" in row[1])
 
         stats_text = f"""
 📊 Test Statistics
 
-Total Tests: {total}
-✅ Passed: {passed}
-❌ Failed: {failed}
-📈 Success Rate: {(passed / total * 100):.1f}% if total > 0 else 0%
+Total Tests: {self.stats["total"]}
+✅ Passed: {self.stats["passed"]}
+❌ Failed: {self.stats["failed"]}
+📈 Success Rate: {success_rate:.1f}%
         """
 
-        stats = self.query_one("#stats-display", Static)
-        stats.update(stats_text.strip())
+        panel = Panel.fit(
+            stats_text.strip(), title="📈 Statistics", border_style="blue"
+        )
+        console.print(panel)
 
 
+@app.callback()
 def main():
-    """Main entry point."""
-    app = GraphRAGTester()
-    app.run()
+    """GraphRAG Testing CLI - Interactive testing for LangChain BAML GraphRAG functionality."""
+    welcome_text = Text("🧪 GraphRAG Testing CLI", style="bold magenta")
+    welcome_text.append(
+        "\nInteractive CLI for testing LangChain BAML GraphRAG functionality",
+        style="dim",
+    )
+
+    panel = Panel.fit(welcome_text, title="🚀 Welcome", border_style="green")
+    console.print(panel)
+
+
+@app.command()
+def ollama():
+    """Test Ollama server connectivity."""
+    runner = TestRunner()
+
+    console.print("[bold blue]🔗 Testing Ollama Connection[/bold blue]")
+    runner.run_test(test_ollama_connection, "Ollama Connection")
+    runner.run_test(test_gpt_oss_available, "GPT-OSS Available")
+    runner.run_test(test_chat_ollama_gpt_oss, "ChatOllama GPT-OSS")
+
+    runner.show_results()
+    runner.show_stats()
+
+
+@app.command()
+def data():
+    """Test data loading functionality."""
+    runner = TestRunner()
+
+    console.print("[bold blue]📊 Testing Data Loading[/bold blue]")
+    runner.run_data_test()
+
+    runner.show_results()
+    runner.show_stats()
+
+
+@app.command()
+def graph():
+    """Test graph extraction functionality."""
+    console.print(
+        "[bold yellow]🕸️ Graph extraction test requires Ollama server to be running.[/bold yellow]"
+    )
+    console.print(
+        "[dim]Please ensure Ollama is accessible at the configured host before running this test.[/dim]"
+    )
+
+
+@app.command()
+def all():
+    """Run all tests."""
+    runner = TestRunner()
+
+    console.print("[bold green]🚀 Running All GraphRAG Tests[/bold green]")
+    console.print()
+
+    # Ollama tests
+    console.print("[bold blue]🔗 Testing Ollama Connection[/bold blue]")
+    runner.run_test(test_ollama_connection, "Ollama Connection")
+    runner.run_test(test_gpt_oss_available, "GPT-OSS Available")
+    runner.run_test(test_chat_ollama_gpt_oss, "ChatOllama GPT-OSS")
+
+    # Data tests
+    console.print("[bold blue]📊 Testing Data Loading[/bold blue]")
+    runner.run_data_test()
+
+    # Graph tests (placeholder)
+    console.print(
+        "[bold yellow]🕸️ Graph extraction test requires Ollama server to be running.[/bold yellow]"
+    )
+
+    console.print()
+    runner.show_results()
+    runner.show_stats()
+
+
+@app.command()
+def info():
+    """Show project information."""
+    info_text = """
+🎯 GraphRAG Testing CLI
+
+This CLI provides interactive testing for LangChain BAML GraphRAG functionality.
+
+Available commands:
+  • ollama  - Test Ollama server connectivity
+  • data    - Test data loading functionality
+  • graph   - Test graph extraction (requires Ollama)
+  • all     - Run all tests
+  • info    - Show this information
+
+Usage examples:
+  python cli.py ollama
+  python cli.py data
+  python cli.py all
+    """
+
+    panel = Panel.fit(info_text.strip(), title="ℹ️ Information", border_style="cyan")
+    console.print(panel)
 
 
 if __name__ == "__main__":
-    main()
+    app()
