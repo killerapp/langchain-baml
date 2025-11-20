@@ -40,6 +40,92 @@ app = typer.Typer(
 console = Console()
 
 
+class StreamingFeedback:
+    """Provides visual feedback during BAML streaming operations."""
+
+    def __init__(self, console: Console):
+        self.console = console
+        self.last_direction = None
+        self.token_count = 0
+        self.start_time = time.time()
+        self.live_display = None
+
+    def start_streaming(self):
+        """Initialize streaming feedback display."""
+        from rich.live import Live
+        from rich.text import Text
+
+        status_text = Text("🔄 Initializing stream...", style="blue")
+        self.live_display = Live(
+            status_text, console=self.console, refresh_per_second=10
+        )
+        self.live_display.start()
+
+    def update_feedback(self, direction: str, log=None):
+        """Update the streaming feedback display.
+
+        Args:
+            direction: "up" for sending tokens, "down" for receiving tokens
+            log: FunctionLog object from BAML (optional)
+        """
+        if not self.live_display:
+            return
+
+        from rich.text import Text
+
+        current_time = time.time() - self.start_time
+        self.token_count += 1
+
+        if direction == "up":
+            arrow = "↑"
+            color = "green"
+            status = "Sending tokens"
+        elif direction == "down":
+            arrow = "↓"
+            color = "blue"
+            status = "Receiving tokens"
+        else:
+            arrow = "⟳"
+            color = "yellow"
+            status = "Processing"
+
+        # Create status text with arrow and info
+        status_text = Text()
+        status_text.append(f"{arrow} ", style=color)
+        status_text.append(f"{status}", style="white")
+        status_text.append(f" | Tokens: {self.token_count}", style="dim")
+        status_text.append(f" | Time: {current_time:.1f}s", style="dim")
+
+        self.live_display.update(status_text)
+        self.last_direction = direction
+
+    def finish_streaming(self, success: bool = True):
+        """Finalize the streaming feedback display."""
+        if not self.live_display:
+            return
+
+        from rich.text import Text
+
+        final_time = time.time() - self.start_time
+        status_text = Text()
+
+        if success:
+            status_text.append("✅ ", style="green")
+            status_text.append("Stream completed", style="green")
+        else:
+            status_text.append("❌ ", style="red")
+            status_text.append("Stream failed", style="red")
+
+        status_text.append(f" | Total tokens: {self.token_count}", style="dim")
+        status_text.append(f" | Duration: {final_time:.1f}s", style="dim")
+
+        self.live_display.update(status_text)
+        self.live_display.stop()
+
+        # Print final newline
+        self.console.print()
+
+
 class TestRunner:
     """Handles test execution and results."""
 
@@ -275,6 +361,9 @@ def graph():
 @app.command()
 def compare(
     count: int = typer.Option(2, help="Number of articles to test (default: 2)"),
+    stream_feedback: bool = typer.Option(
+        False, help="Enable streaming feedback with up/down arrows"
+    ),
 ):
     """Compare standard LangChain vs BAML graph extraction performance."""
     console.print(
@@ -436,21 +525,56 @@ def compare(
             ]
         )
 
-        baml_chain = default_prompt | llm | get_graph
-
         baml_success = 0
         baml_total = len(test_articles)
 
         for i, article in enumerate(test_articles):
             console.print(f"  Processing article {i + 1}/{baml_total}...")
+
+            feedback = None
             try:
-                result = baml_chain.invoke({"input": article})
+                if stream_feedback:
+                    # Create streaming feedback handler
+                    feedback = StreamingFeedback(console)
+                    feedback.start_streaming()
+
+                    def on_tick_callback(event_type: str, log):
+                        """Callback for streaming feedback."""
+                        if feedback is None:
+                            return
+                        # Determine direction based on event type or log content
+                        if hasattr(log, "role") and log.role == "user":
+                            feedback.update_feedback("up", log)
+                        elif hasattr(log, "role") and log.role in [
+                            "assistant",
+                            "system",
+                        ]:
+                            feedback.update_feedback("down", log)
+                        else:
+                            # Default to alternating pattern for visual feedback
+                            feedback.update_feedback(
+                                "up" if i % 2 == 0 else "down", log
+                            )
+
+                    # Use streaming BAML call with on_tick callback
+                    result = client.b.ExtractGraph(
+                        graph=article, baml_options={"on_tick": on_tick_callback}
+                    )
+
+                    feedback.finish_streaming(success=True)
+                else:
+                    # Use regular non-streaming call
+                    result = client.b.ExtractGraph(graph=article)
+
                 if result and hasattr(result, "nodes") and result.nodes:
                     baml_success += 1
                     console.print(f"  ✅ Success")
                 else:
                     console.print(f"  ❌ No nodes extracted")
+
             except Exception as e:
+                if feedback:
+                    feedback.finish_streaming(success=False)
                 console.print(f"  ❌ Failed: {str(e)[:50]}...")
 
         baml_rate = (baml_success / baml_total) * 100
